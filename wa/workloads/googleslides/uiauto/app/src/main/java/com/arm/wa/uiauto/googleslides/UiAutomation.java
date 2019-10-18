@@ -86,7 +86,7 @@ public class UiAutomation extends BaseUiAutomation {
     @Test
     public void runWorkload() throws Exception {
         testEditNewSlidesDocument(newDocumentName, workingDirectoryName, doTextEntry);
-        openDocument(pushedDocumentName, workingDirectoryName);
+        openDocument(findPresentationFileObject(pushedDocumentName, workingDirectoryName));
         waitForProgress(WAIT_TIMEOUT_1SEC*30);
         testSlideshowFromStorage(slideCount);
     }
@@ -178,10 +178,9 @@ public class UiAutomation extends BaseUiAutomation {
             }
             mDevice.pressBack();
             showRoots();
-        }
-        else if (localDevice.exists()){
+        } else if (localDevice.exists()){
             localDevice.click();
-        }
+        } 
 
         UiObject folderEntry = mDevice.findObject(new UiSelector().textContains(workingDirectoryName));
         UiScrollable list = new UiScrollable(new UiSelector().scrollable(true));
@@ -190,15 +189,22 @@ public class UiAutomation extends BaseUiAutomation {
         } else {
             folderEntry.waitForExists(WAIT_TIMEOUT_1SEC*10);
         }
+
+        if(!folderEntry.exists()) {
+            showRoots();
+            clickUiObject(BY_TEXT, "Photos");
+            folderEntry.waitForExists(WAIT_TIMEOUT_1SEC);
+        }
         folderEntry.clickAndWaitForNewWindow();
 
         UiObject picture = mDevice.findObject(new UiSelector().resourceId("com.android.documentsui:id/details"));
         if (!picture.exists()) {
-            UiObject pictureAlternate = mDevice.findObject(new UiSelector().resourceId("com.android.documentsui:id/date").enabled(true));
-            pictureAlternate.click();
-        } else {
-            picture.click();
+            picture = mDevice.findObject(new UiSelector().resourceId("com.android.documentsui:id/date").enabled(true));
         }
+        if(!picture.exists()) {
+            picture = mDevice.findObject(new UiSelector().descriptionContains("Photo"));
+        }
+        picture.click();
         UiObject done_button = mDevice.findObject(new UiSelector().resourceId("android:id/action_mode_close_button"));
         if (done_button.exists()){
             done_button.click();
@@ -248,18 +254,24 @@ public class UiAutomation extends BaseUiAutomation {
         logger.stop();
     }
 
-    public void openDocument(String docName, String workingDirectoryName) throws Exception {
-        String testTag = "document_open";
-        ActionLogger logger = new ActionLogger(testTag, parameters);
+    public UiObject findPresentationFileObject(String docName, String workingDirectoryName) throws Exception {
+        UiObject openDocumentButton = mDevice.findObject(new UiSelector().resourceId(packageID + "menu_open_with_picker"));
 
-        clickUiObject(BY_DESC, "Open presentation");
+        openDocumentButton.waitForExists(WAIT_TIMEOUT_1SEC * 10);
+        openDocumentButton.click();
         clickUiObject(BY_TEXT, "Device storage", true);
+
+        UiObject fileObject = mDevice.findObject(new UiSelector().textContains(docName));
+        if(fileObject.exists()) {
+            return fileObject;
+        }
 
         UiObject workingDirectory = mDevice.findObject(new UiSelector().text(workingDirectoryName));
         UiObject nav_button = mDevice.findObject(new UiSelector().resourceId(packageID + "file_picker_nav_up_btn"));
         UiObject folderEntry = mDevice.findObject(new UiSelector().textContains(workingDirectoryName));
         if (workingDirectory.exists()) {
             folderEntry.clickAndWaitForNewWindow();
+            return mDevice.findObject(new UiSelector().textContains(docName));
         }
         else if (nav_button.exists()) {
             while (nav_button.exists()) {
@@ -290,9 +302,15 @@ public class UiAutomation extends BaseUiAutomation {
                 new UiScrollable(new UiSelector().className("android.support.v7.widget.RecyclerView"));
             listAlternate.scrollIntoView(new UiSelector().textContains(docName));
         }
+        return mDevice.findObject(new UiSelector().textContains(docName));
+    }
+
+    public void openDocument(UiObject presentationFileObject) throws Exception {
+        String testTag = "document_open";
+        ActionLogger logger = new ActionLogger(testTag, parameters);
 
         logger.start();
-        clickUiObject(BY_TEXT, docName);
+        presentationFileObject.click();
         UiObject open =
             mDevice.findObject(new UiSelector().text("Open"));
         if (open.exists()) {
@@ -306,7 +324,13 @@ public class UiAutomation extends BaseUiAutomation {
         ActionLogger logger = new ActionLogger(testTag, parameters);
         logger.start();
         clickUiObject(BY_DESC, "New presentation");
-        clickUiObject(BY_TEXT, "New PowerPoint", true);
+        UiObject newPresentationButton = mDevice.findObject(new UiSelector().descriptionContains("New Presentation")
+                                                                            .className("android.widget.ImageButton"));
+        if(newPresentationButton.exists()) {
+            newPresentationButton.click();
+        } else {
+            clickUiObject(BY_TEXT, "New PowerPoint", true);
+        }
         logger.stop();
         dismissUpdateDialog();
     }
