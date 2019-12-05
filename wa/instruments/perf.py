@@ -252,15 +252,31 @@ class PerfInstrument(Instrument):
     def _process_simpleperf_stat_from_raw(stat_file, context, label):
         with open(stat_file) as fh:
             for line in fh:
+                print(line)
+                if 'id' in line and 'time_enabled' in line:
+                    counter_and_cpu = line.split(':')[0]
+                    counter = counter_and_cpu.split('(')[0]
+                    tid = counter_and_cpu.split('(')[1].split(',')[0].split(' ')[1]
+                    cpu = counter_and_cpu.split('(')[1].split(',')[1].strip().split(' ')[1].strip(')')
+                    stats = line.split(':')[1].split(',')
+                    classifiers = {}
+                    classifiers['label'] = label
+                    classifiers['tid'] = tid
+                    classifiers['event'] = counter
+                    pmu_count = 0
+                    for stat in stats:
+                        if 'count' in stat:
+                            pmu_count = stat.strip().split(' ')[1].strip()
+                            continue
+                    context.add_metric('{}_{}'.format('pmu_event_count_cpu', cpu), pmu_count, 'count', classifiers = classifiers)
                 if '#' in line:
                     tmp_line = line.split('#')[0]
                     tmp_line = line.strip()
-                    count, metric = tmp_line.split(' ')[0], tmp_line.split(' ')[2]
+                    count, event = tmp_line.split(' ')[0], tmp_line.split(' ')[2]
                     count = int(count.replace(',', ''))
                     scaled_percentage = line.split('(')[1].strip().replace(')', '').replace('%', '')
                     scaled_percentage = int(scaled_percentage)
-                    metric = '{}_{}'.format(label, metric)
-                    context.add_metric(metric, count, 'count', classifiers={'scaled from(%)': scaled_percentage})
+                    context.add_metric('pmu_event_count_total', count, 'count', classifiers={'scaled from(%)': scaled_percentage, 'label':label, 'event': event})
 
     def _process_simpleperf_record_output(self, context):
         for host_file in os.listdir(self.outdir):
