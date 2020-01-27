@@ -4,12 +4,13 @@ from dateutil.parser import parse
 import datetime
 import math
 import os
+import time
 
 SPEC_TARGET_PATH_BASE = '/data/local/tmp/spec2k6'
 
 TARGET_BIN_DIRECTORY = '/data/local/tmp/bin'
 
-TARGET_OUTPUT_DIRECTORY = 'sdcard/devlib-target' 
+TARGET_OUTPUT_DIRECTORY = '/sdcard/devlib-target' 
 
 BASE_MACHINE_REFERENCE_TIMES = {'400.perlbench' : 9770, '401.bzip2' : 9650,
                                 '403.gcc' : 8050, '429.mcf' : 9120, '445.gobmk' : 10490,
@@ -59,6 +60,8 @@ ALL_TESTS = SPEC_INT_TESTS + SPEC_FP_TESTS
 
 ALLOWED_TEST_NAMES = ['all', 'spec_int', 'spec_fp'] + ALL_TESTS
 
+CPU_TASKSET_BITMASK_IN_HEX = {'0': '1', '1' : '2', '2' : '4', '3': '8', '4': '10', '5': '20', '6': '40', '7': '80'}
+
 class Spec2006(Workload):
 
     name = 'spec2006'
@@ -75,8 +78,6 @@ class Spec2006(Workload):
 
     def __init__(self, target, **kwargs):
         super(Spec2006, self).__init__(target, **kwargs)
-        #self.deployable_assets = [self.build_name]
-        #self.asset_directory = SPEC_TARGET_PATH_BASE
         self.incomplete_tests = []
         self.spec_int_scores = []
         self.spec_fp_scores = []
@@ -89,82 +90,176 @@ class Spec2006(Workload):
         	self.test_names = SPEC_INT_TESTS
         elif 'spec_fp' in self.test_names:
         	self.test_names = SPEC_FP_TESTS
-        #TODO: Allow user to enter spec_int as argument along with individual fp tests and vice versa
 
     def init_resources(self, resolver):
         super(Spec2006, self).init_resources(resolver)
-        # Remove base directory if it already exists
-        # target_directory_files = self.target.execute('cd /data/local/tmp && ls', as_root=True)
-        # print(target_directory_files)
-        # if self.build_name in target_directory_files:
-        #	command = 'rm -rf /data/local/tmp/{}'.format(self.build_name)
-        #	self.target.execute(command, as_root=True)
 
     def initialize(self, context):
         super(Spec2006, self).initialize(context)
-        resource = File(self, "script/run_spec_2006_speed.sh")
+        resource = File(self, "script/run_spec_2006.sh")
         host_executable = context.get_resource(resource)
-        self.run_spec_script = self.target.install(host_executable)    
+        self.run_spec_script = self.target.install(host_executable)
+        
+        # Convert to type string to ensure correct bitmask gets set in invoke_background()
+        self.online_cpus = [str(cpu) for cpu in self.target.list_online_cpus()]
+
+        #Remove base directory if it already exists
+        if 'spec2k6' in self.target.list_directory('data/local/tmp'):
+            command = 'rm -rf /data/local/tmp/spec2k6'
+            self.target.execute(command, as_root=True)
+
+        #Install spec2k6 on device
+        self.target.execute('cd /data/local/tmp && mkdir spec2k6')
+        for test in self.test_names:
+            test_run_folder = os.path.join('spec2k6', test)
+            test_run_folder = context.get_resource(File(self, test_run_folder))
+            self.logger.info('Copying {} to device'.format(test))
+            test_run_folder_target_dir = os.path.join(SPEC_TARGET_PATH_BASE, test)
+            self.target.push(test_run_folder, test_run_folder_target_dir, timeout=180)
+
 
     def setup(self, context):
         super(Spec2006, self).setup(context)
-        #self.deploy_assets(context)
+        # Remove old output directory on device
+        if 'spec_output' in self.target.list_directory(TARGET_OUTPUT_DIRECTORY):
+            self.target.execute('cd {} && rm -r spec_output'.format(TARGET_OUTPUT_DIRECTORY))
+        self.target.execute('cd {} && mkdir spec_output'.format(TARGET_OUTPUT_DIRECTORY))
 
     def run(self, context):
         super(Spec2006, self).run(context)
+        if self.run_type == 'speed':
+            self._run_speed_tests()
+        else:
+            self._run_throughput_tests()
+
+    def extract_results(self, context):
+        super(Spec2006, self).extract_results(context)
+        output_folder = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output')
+        host_output_folder = os.path.join(context.output_directory, 'spec_output')
+        self.target.pull(output_folder, host_output_folder)
+        for test_name in self.test_names:
+            if test_name in self.incomplete_tests:
+                continue
+            for file in os.listdir(os.path.join(host_output_folder, test_name)):
+                if 'ref' in file and 'err' in file:
+                    if os.stat(os.path.join(host_output_folder, test_name, file)).st_size != 0:
+                        self.logger.warning('errors were found during run in {}'.format(file))
+                        if test_name not in self.incomplete_tests:
+                            self.incomplete_tests.append(test_name)
+        
+
+    def update_output(self, context):
+        super(Spec2006, self).update_output(context)
+        if self.run_type == 'throughput':
+            self._update_throughput_output(context)
+        else:
+            self._update_speed_output(context)
+
+        # Calculate and add benchmark group scores if number of complete tests >= 5 
+        if len(self.spec_int_scores) >= 5:
+            group_score = self._calculate_group_benchmark_score(self.spec_int_scores)
+            context.add_metric('spec_int_score', group_score, 'ratio_score')
+        if len(self.spec_fp_scores) >=5:
+            group_score = self._calculate_group_benchmark_score(self.spec_fp_scores)
+            context.add_metric('spec_fp_score', group_score, 'ratio_score')
+
+    def teardown(self, context):
+        super(Spec2006, self).teardown(context)
+        self.target.execute('cd {} && rm -r spec_output'.format(TARGET_OUTPUT_DIRECTORY))
+        
+        if len(self.incomplete_tests) > 0:
+        	self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
+
+    def _run_speed_tests(self):
         for test_name in self.test_names:
             self.logger.info('*****RUNNING******: ' + test_name)
             if not self._does_test_folder_exist(test_name) or not self._does_run_folder_exist(test_name):
                 self.logger.warning('Test folder does not exist for {}......skipping'.format(test_name))
                 self.incomplete_tests.append(test_name)
                 continue
-            #if not self._does_run_folder_exist(test_name):
-            #    self.logger.warning('Run folder does not exist for {}......skipping'.format(test_name))
-            #    self.incomplete_tests.append(test_name)
-            #    continue
-            output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, self._get_timing_file_name(test_name))
-            command = 'sh {} {} 2>&1 | tee {}'.format(self.run_spec_script, test_name, output_file_path)
+            self.target.execute('cd {} && mkdir {}'.format(os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output'), test_name))
+            test_target_output_dir = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output', test_name)
+            timing_output_file_path = os.path.join(test_target_output_dir, 'timing.txt')
+            command = 'sh {} {} {} 2>&1 | tee {}'.format(self.run_spec_script, test_name, test_target_output_dir, timing_output_file_path)
             self.target.execute(command, as_root=True)
 
-    def extract_results(self, context):
-        super(Spec2006, self).extract_results(context)
+    def _run_throughput_tests(self):
         for test_name in self.test_names:
-            if test_name in self.incomplete_tests:
-        	    continue
-            outfile_name = self._get_timing_file_name(test_name)
-            self.host_outfile = os.path.join(context.output_directory, outfile_name)
-            target_outfile = os.path.join(TARGET_OUTPUT_DIRECTORY, outfile_name)
-            self.target.pull(target_outfile, self.host_outfile)
-            #TODO: Pull error files and parse to verify tests ran correctly.
+            self.logger.info('*****RUNNING******: ' + test_name)
+            if not self._does_test_folder_exist(test_name) or not self._does_run_folder_exist(test_name):
+                self.logger.warning('Test folder does not exist for {}......skipping'.format(test_name))
+                self.incomplete_tests.append(test_name)
+                continue
+            self.target.execute('cd {} && mkdir {}'.format(os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output'), test_name))
+            test_target_output_dir = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output', test_name)
+            for cpu in self.online_cpus:
+                output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output', test_name, 'cpu_{}_timing.txt'.format(cpu))
+                command = 'sh {} {} {} {} 2>&1 | tee {}'.format(self.run_spec_script, test_name, test_target_output_dir, cpu, output_file_path)
+                self.target.background_invoke(command, on_cpus=cpu)
+            is_running = True
+            while is_running:
+                time.sleep(460)
+                open_timing_files = self.target.execute('lsof | grep _timing_output.txt', check_exit_code=False)
+                if len(open_timing_files.splitlines()) <= 0:
+                    is_running = False
 
-    def update_output(self, context):
-        super(Spec2006, self).update_output(context)
+    def _update_speed_output(self, context):
         for test_name in self.test_names:
             if test_name in self.incomplete_tests:
                 continue
-            timings_file = os.path.join(context.output_directory, self._get_timing_file_name(test_name))
+            timings_file = os.path.join(context.output_directory, 'spec_output', test_name, 'timing.txt')
             self._parse_timings_file(context, timings_file, test_name)
 
-        # Calculate and add benchmark group scores if number of complete tests >= 5
-        if len(self.spec_int_scores) >= 5:
-        	group_score = _calculate_group_benchmark_score(self.spec_int_scores)
-        	context.add_metric('spec_int_score', group_score, 'ratio_score')
-        if len(self.spec_fp_scores) >=5:
-        	group_score = _calculate_group_benchmark_score(self.spec_fp_scores)
-        	context.add_metric('spec_fp_score', group_score, 'ratio_score')
-
-    def teardown(self, context):
-        super(Spec2006, self).teardown(context)
-        #Clean up outfiles 
+    def _update_throughput_output(self, context):
         for test_name in self.test_names:
-        	files_in_output_dir = self.target.execute('cd {} && ls'.format(TARGET_OUTPUT_DIRECTORY))
-        	timing_file_name = self._get_timing_file_name(test_name)
-        	if timing_file_name in files_in_output_dir:
-        	    outfile_path = os.path.join(TARGET_OUTPUT_DIRECTORY, timing_file_name)
-        	    command = 'rm {}'.format(outfile_path)
-        	    self.target.execute(command)
-        if len(self.incomplete_tests) > 0:
-        	self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
+            if test_name in self.incomplete_tests:
+                continue
+            longest_elapsed_time = datetime.timedelta()
+            for cpu in self.online_cpus:
+                total_time_elapsed_for_cpu = datetime.timedelta()
+                host_outfile = os.path.join(context.output_directory, 'spec_output', test_name, 'cpu_{}_timing.txt'.format(cpu))
+                with open(host_outfile) as fh:
+                    for line in fh:
+                        if not 'real' in line:
+                            continue
+                        elapsed_time = parse(line.split('real')[0].strip()).time()
+                        (h, m, s) = elapsed_time.strftime('%H:%M:%S.%f').split(':')
+                        total_time_elapsed_for_cpu += datetime.timedelta(hours=int(h), minutes=int(m), seconds=float(s))
+                if total_time_elapsed_for_cpu > longest_elapsed_time:
+                    longest_elapsed_time = total_time_elapsed_for_cpu
+
+            if longest_elapsed_time.seconds == 0:
+                self.incomplete_tests.append(test_name)
+                return
+
+            classifiers = {'run_time_seconds' : longest_elapsed_time.seconds}
+            benchmark_ratio = self._calculate_throughput_test_benchmark_ratio(test_name, longest_elapsed_time, len(self.online_cpus))
+            context.add_metric(test_name, benchmark_ratio, 'ratio_score', classifiers=classifiers)
+
+            if test_name in SPEC_INT_TESTS:
+                self.spec_int_scores.append(benchmark_ratio)
+            else:
+                self.spec_fp_scores.append(benchmark_ratio)
+
+
+    def _clear_target_output_files(self):
+        for test_name in self.test_names:
+            if self._does_test_folder_exist(test_name) and self._does_run_folder_exist(test_name):
+                target_run_folder = os.path.join(SPEC_TARGET_PATH_BASE, test_name, 'run', 'run_base_ref_none.0000')             
+                files_in_run_folder = self.target.execute('cd {} && ls'.format(target_run_folder))
+                files_in_run_folder = files_in_run_folder.splitlines()
+                for file in files_in_run_folder:
+                    if 'ref' in file and 'err' in file:
+                        self.target.execute('cd {} && rm {}'.format(target_run_folder, file))
+                    if 'ref' in file and 'out' in file:
+                        self.target.execute('cd {} && rm {}'.format(target_run_folder, file))
+            
+            files_in_output_dir = self.target.execute('cd {} && ls'.format(TARGET_OUTPUT_DIRECTORY))
+            timing_file_name = self._get_timing_file_name(test_name)
+            if timing_file_name in files_in_output_dir:
+                outfile_path = os.path.join(TARGET_OUTPUT_DIRECTORY, timing_file_name)
+                command = 'rm {}'.format(outfile_path)
+                self.target.execute(command)
     
     def _does_run_folder_exist(self, test_name):
         folders_in_test_dir = self.target.execute('cd /data/local/tmp/spec2k6/{} && ls'.format(test_name), as_root=True)
@@ -179,8 +274,8 @@ class Spec2006(Workload):
         return True
 
     @staticmethod
-    def _get_timing_file_name(test_name):
-    	return '{}{}'.format(test_name, '_timing_output.txt')
+    def _get_throughput_timing_file_name(test_name, cpu):
+        return '{}_cpu{}{}'.format(test_name, cpu, '_timing_output.txt')
 
     def _parse_timings_file(self, context, filepath, test_name):
         total_time = datetime.timedelta()
@@ -207,8 +302,16 @@ class Spec2006(Workload):
 
     @staticmethod
     def _calculate_test_benchmark_ratio(test_name, elapsed_time):
+        # Calculate ratio based off reference machine times
         return round(BASE_MACHINE_REFERENCE_TIMES[test_name] / elapsed_time.seconds, 4)
 
     @staticmethod
+    def _calculate_throughput_test_benchmark_ratio(test_name, elapsed_time, number_cpus):
+        # Calculate ratio based off reference machine times
+        return round(number_cpus * (BASE_MACHINE_REFERENCE_TIMES[test_name] / elapsed_time.seconds), 4)
+
+    @staticmethod
     def _calculate_group_benchmark_score(benchmark_ratios):
+        # Calculate geometric mean
         return math.exp(math.fsum(math.log(benchmark_ratio) for benchmark_ratio in benchmark_ratios) / len(benchmark_ratios))
+
