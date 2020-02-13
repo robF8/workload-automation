@@ -63,11 +63,14 @@ ALLOWED_TEST_NAMES = ['all', 'spec_int', 'spec_fp'] + ALL_TESTS
 class Spec2006(Workload):
 
     name = 'spec2006'
-    description = "This is an placeholder description"
+    description = '''Workload to install and run spec2006. SPEC CPU 2006 is a benchmarking test suite. Information can be found at 
+                  https://www.spec.org/cpu2006/
+                  The suite contains two sets of benchmarks: SPECint and SPECfp
+    '''
 
     parameters = [
         Parameter('build_name', kind=str, mandatory=False,
-                  description='Disabled for now. This parameter represents the binaries to be used based off compiler and version etc'),
+                  description='Build name of spec2k6 binary. Builds can be found at '),
         Parameter('test_names', kind=list_or_string, mandatory=True, allowed_values=ALLOWED_TEST_NAMES,
         		  description='Use this parameter to define which tests to run from the cpu2006 suite'),
         Parameter('run_type', kind=str, default='speed', allowed_values=['speed', 'throughput'],
@@ -101,7 +104,7 @@ class Spec2006(Workload):
 
     def setup(self, context):
         super(Spec2006, self).setup(context)
-        self.spec_runner.setup(self.target, context, self)
+        self.spec_runner.setup(self.build_name, self.target, context, self)
 
     def run(self, context):
         super(Spec2006, self).run(context)
@@ -130,7 +133,7 @@ class SpecRunner():
         self.spec_fp_scores = []
 
 
-    def setup(self, target, context, resource_owner):
+    def setup(self, build_name, target, context, resource_owner):
         resource = File(resource_owner, "script/run_spec_2006.sh")
         host_executable = context.get_resource(resource)
         self.run_spec_script = target.install(host_executable)
@@ -140,18 +143,22 @@ class SpecRunner():
             target.execute('cd {} && rm -r spec_output'.format(TARGET_OUTPUT_DIRECTORY))
         target.execute('cd {} && mkdir spec_output'.format(TARGET_OUTPUT_DIRECTORY))
 
+        resource = File(resource_owner, build_name)
+        spec2k6_binaries = context.get_resource(resource)
+        
         #Remove base directory if it already exists
         if 'spec2k6' in target.list_directory('data/local/tmp'):
             command = 'rm -rf /data/local/tmp/spec2k6'
-            target.execute(command, as_root=True)
+            target.execute(command, as_root=target.is_rooted)
 
         #Install spec2k6 on device
         target.execute('cd /data/local/tmp && mkdir spec2k6')
         for test in self.tests:
-            test_run_folder = os.path.join('spec2k6', test)
-            test_run_folder = context.get_resource(File(resource_owner, test_run_folder), strict=False)
-            if test_run_folder == None:
-                continue
+            test_run_folder = os.path.join(spec2k6_binaries, 'benchspec', 'CPU2006' , test)
+            if not os.path.exists(test_run_folder):
+                test_run_folder = os.path.join(spec2k6_binaries, test)
+            if not os.path.exists(test_run_folder):
+            	continue
             self.logger.info('Copying {} to device'.format(test))
             test_run_folder_target_dir = os.path.join(SPEC_TARGET_PATH_BASE, test)
             target.push(test_run_folder, test_run_folder_target_dir, timeout=300)
@@ -162,7 +169,7 @@ class SpecRunner():
     def extract_results(self, target, context):
         output_folder = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output')
         host_output_folder = os.path.join(context.output_directory, 'spec_output')
-        target.pull(output_folder, host_output_folder)
+        target.pull(output_folder, host_output_folder, timeout=60)
         for test_name in self.tests:
             if test_name in self.incomplete_tests:
                 continue
@@ -180,13 +187,13 @@ class SpecRunner():
             self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
 
     def _does_run_folder_exist(self, target, test_name):
-        folders_in_test_dir = target.execute('cd /data/local/tmp/spec2k6/{} && ls'.format(test_name), as_root=True)
+        folders_in_test_dir = target.list_directory('/data/local/tmp/spec2k6/{}'.format(test_name))
         if 'run' not in folders_in_test_dir:
             return False
         return True
 
     def _does_test_folder_exist(self, target, test_name):
-        folders_in_test_dir = target.execute('cd /data/local/tmp/spec2k6 && ls', as_root=True)
+        folders_in_test_dir = target.list_directory('/data/local/tmp/spec2k6/')
         if test_name not in folders_in_test_dir:
             return False
         return True
@@ -246,7 +253,7 @@ class SpecRunnerSpeed(SpecRunner):
             test_target_output_dir = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output', test_name)
             timing_output_file_path = os.path.join(test_target_output_dir, 'timing.txt')
             command = 'sh {} {} {} 2>&1 | tee {}'.format(self.run_spec_script, test_name, test_target_output_dir, timing_output_file_path)
-            target.execute(command, as_root=True)
+            target.execute(command, as_root=target.is_rooted)
 
     def update_output(self, context):
         for test_name in self.tests:
@@ -266,6 +273,19 @@ class SpecRunnerThroughput(SpecRunner):
     def __init__(self, tests, logger, online_cpus):
         super().__init__(tests, logger)
         self.online_cpus = online_cpus
+        #TODO: Tune expected wait time for each test
+        self.EXPECTED_WAIT_TIME = {'400.perlbench' : 502, '401.bzip2' : 360,
+                                   '403.gcc' : 8050, '429.mcf' : 9120, '445.gobmk' : 10490,
+                                   '456.hmmer' : 9330, '458.sjeng' : 12100,
+                                   '462.libquantum' : 20720, '464.h264ref' : 22130,
+                                   '471.omnetpp' : 6250, '473.astar' : 7020,
+                                   '483.xalancbmk' : 6900, '410.bwaves' : 13590,
+                                   '416.gamess' : 19580, '433.milc' : 9180, '434.zeusmp' : 9100,
+                                   '435.gromacs' : 7140, '436.cactusADM' : 11950,
+                                   '437.leslie3d' : 9400, '444.namd' : 8020, '447.dealII' : 11440,
+                                   '450.soplex' : 8340, '453.povray' : 5320, '454.calculix' : 8250,
+                                   '459.GemsFDTD' : 10610, '465.tonto' : 9840, '470.lbm' : 13740,
+                                   '481.wrf' : 11170, '482.sphinx3' : 19490}
 
     def run(self, target):
         for test_name in self.tests:
@@ -280,10 +300,12 @@ class SpecRunnerThroughput(SpecRunner):
                 output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec_output', test_name, 'cpu_{}_timing.txt'.format(cpu))
                 command = 'sh {} {} {} {} 2>&1 | tee {}'.format(self.run_spec_script, test_name, test_target_output_dir, cpu, output_file_path)
                 target.background_invoke(command, on_cpus=cpu)
+            #time.sleep(2400) # TODO: Sleep for expected wait time once gathered for each test
             is_running = True
             while is_running:
-                time.sleep(60)
-                open_timing_files = target.execute('lsof | grep _timing.txt', check_exit_code=False)
+                time.sleep(1)
+                print(target.execute('cat /proc/meminfo | grep Available'))
+                open_timing_files = target.execute('lsof | grep _timing.txt', will_succeed=False, check_exit_code=False)
                 if len(open_timing_files.splitlines()) <= 0:
                     is_running = False
 

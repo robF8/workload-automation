@@ -23,9 +23,11 @@ import json
 import logging
 import os
 import shutil
+from subprocess import PIPE, run
 import sys
 
 import requests
+import zipfile
 
 
 from wa import Parameter, settings, __file__ as _base_filepath
@@ -377,3 +379,51 @@ class Filer(ResourceGetter):
         self.logger.debug('cp {} {}'.format(result, local_full_path))
         shutil.copy(result, local_full_path)
         return result
+
+class S3(ResourceGetter):
+
+    name = 's3'
+
+    parameters = [
+        Parameter('remote_path', global_alias='remote_s3_path', default='',
+                  description="""
+                  Base path to remote binaries
+                  """),
+        Parameter('always_fetch', kind=boolean, default=False,
+                  global_alias='always_fetch_remote_assets',
+                  description="""
+                  If ``True``, will always attempt to fetch assets from the
+                  remote, even if a local cached copy is available.
+                  """),
+    ]
+
+    def register(self, resolver):
+        resolver.register(self.get, SourcePriority.remote)
+
+    def get(self, resource):
+        #print(resource.path)
+        if resource.kind != 'File':
+            return None
+        remote_path = os.path.join(self.remote_path, resource.path)
+        #print(remote_path)
+        local_path = os.path.join(settings.dependencies_directory, resource.owner.dependencies_directory, resource.path)
+        #print(local_path)
+        if not self.always_fetch:
+            result = get_from_location(local_path, resource)
+            if result:
+                return result
+            result = self._download_s3_resource(remote_path, local_path, resource)
+            if result:
+                return result
+            return None
+
+    def _download_s3_resource(self, remote_path, local_path, resource):
+        print(remote_path)
+        os.system('s3cmd get --recursive {} {}.zip'.format(remote_path, local_path))
+        print(local_path)
+        if os.path.exists('{}{}'.format(local_path, '.zip')):
+            with zipfile.ZipFile('{}{}'.format(local_path, '.zip'),"r") as zip_ref:
+                zip_ref.extractall(os.path.join(resource.owner.dependencies_directory, resource.path))
+            return local_path
+        else:
+            return None
