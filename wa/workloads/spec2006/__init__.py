@@ -266,7 +266,7 @@ class SpecRunnerSpeed(SpecRunner):
             print(test_target_output_dir)
             timing_file_prefix = 'int' if test_name in SPEC_INT_TESTS else 'fp'
             timing_output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, test_name, 'timing.txt')
-            self.logger.info(mask)
+            self.logger.info('Setting affinity with mask: {}'.format(mask))
             command = 'sh {} {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, mask, test_target_output_dir, timing_output_file_path)
             target.execute(command, as_root=True)
 
