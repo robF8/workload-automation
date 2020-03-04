@@ -259,64 +259,54 @@ class SpecRunnerSpeed(SpecRunner):
             target.execute('cd {} && mkdir {}'.format(os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER), test_name))
             test_target_output_dir = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, test_name)
             timing_file_prefix = 'int' if test_name in SPEC_INT_TESTS else 'fp'
-            timing_output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, '{}_timing.txt'.format(timing_file_prefix))
-            target.execute('echo {}: | tee -a {}'.format(test_name, timing_output_file_path), as_root=target.is_rooted)
+            timing_output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, test_name, 'timing.txt')
+            #target.execute('echo {}: | tee -a {}'.format(test_name, timing_output_file_path), as_root=target.is_rooted)
             command = 'sh {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, test_target_output_dir, timing_output_file_path)
             target.execute(command, as_root=True)
 
     def update_output(self, context):
         super().update_output(context)
-        spec_fp_scores = []
-        spec_int_scores = []
-        
-        spec_int_timings_file = os.path.join(context.output_directory, OUTPUT_FOLDER, 'int_timing.txt')
-        if os.path.exists(spec_int_timings_file):
-            spec_int_scores = self._parse_timings_file(context, spec_int_timings_file, 'int')
-        
-        spec_fp_timings_file = os.path.join(context.output_directory, OUTPUT_FOLDER, 'fp_timing.txt')
-        if os.path.exists(spec_fp_timings_file):
-            spec_fp_scores = self._parse_timings_file(context, spec_fp_timings_file, 'fp')
+        for test_name in self.tests:
+            if test_name in self.incomplete_tests:
+                continue
+            timings_file = os.path.join(context.output_directory, OUTPUT_FOLDER, test_name, 'timing.txt')
+            group = 'int' if test_name in SPEC_INT_TESTS else 'fp'
+            self._parse_timings_file(context, timings_file, group, test_name)
+        self._calculate_group_benchmark_scores(context, self.spec_int_scores, self.spec_fp_scores)
 
-        self._calculate_group_benchmark_scores(context, spec_int_scores, spec_fp_scores)
-
-    def _parse_timings_file(self, context, filepath, group):
-        group_scores = []
-        test_name = ''
-        is_valid_result = True
+    def _parse_timings_file(self, context, filepath, group, test_name):
         total_time = datetime.timedelta()
-        with open(filepath) as fh:  
+        with open(filepath) as fh:
             for line in fh:
-                if line.replace(':', '').strip() in ALL_TESTS:
-                    if test_name and is_valid_result:
-                        benchmark_ratio = self._calculate_test_benchmark_ratio(test_name, total_time)
-                        classifiers = {'run_time_seconds' : total_time.seconds, 'run_type' : 'speed'}
-                        context.add_metric(test_name, benchmark_ratio, 'ratio_score', classifiers=classifiers)
-                        group_scores.append(benchmark_ratio)
-                    test_name = line.replace(':', '').strip()
-                    is_valid_result = False if test_name in self.incomplete_tests else True 
-                    total_time = datetime.timedelta()
-                    continue
-                if not is_valid_result:
-                    continue
                 if not 'real' in line:
-                    self.incomplete_tests.append(test_name)
-                    is_valid_result = False
                     continue
                 elapsed_time = parse(line.split('real')[0].strip()).time()
-                if elapsed_time == datetime.timedelta():
-                    self.incomplete_tests.append(test_name)
-                    is_valid_result = False
-                    continue
                 (h, m, s) = elapsed_time.strftime('%H:%M:%S.%f').split(':')
                 total_time += datetime.timedelta(hours=int(h), minutes=int(m), seconds=float(s))
-        if is_valid_result:
-            benchmark_ratio = self._calculate_test_benchmark_ratio(test_name, total_time)
-            classifiers = {'run_time_seconds' : total_time.seconds, 'run_type' : 'speed'}
-            context.add_metric(test_name, benchmark_ratio, 'ratio_score', classifiers=classifiers)
-            group_scores.append(benchmark_ratio)
-        return group_scores
-       
+        classifiers = {'run_time_seconds' : total_time.seconds, 'run_type' : 'speed'}
 
+        if total_time.seconds == 0:
+            self.incomplete_tests.append(test_name)
+            return
+
+        benchmark_ratio = self._calculate_test_benchmark_ratio(test_name, total_time)
+        context.add_metric(test_name, benchmark_ratio, 'ratio_score', classifiers=classifiers)
+
+        if test_name in SPEC_INT_TESTS:
+            self.spec_int_scores.append(benchmark_ratio)
+        else:
+            self.spec_fp_scores.append(benchmark_ratio)
+        
+        self._write_to_group_file(context, filepath, group, test_name)
+
+    def _write_to_group_file(self, context, filepath, group, test_name):
+        with open(filepath, "r") as test_timing:
+            lines = test_timing.readlines()
+        with open(os.path.join(context.output_directory, OUTPUT_FOLDER, '{}_timing.txt'.format(group)), "a+") as group_timing_file:
+            group_timing_file.write('{}:\n'.format(test_name))
+            for line in lines:
+                group_timing_file.write(line)
+       
     @staticmethod
     def _calculate_test_benchmark_ratio(test_name, elapsed_time):
         # Calculate ratio based off reference machine times
