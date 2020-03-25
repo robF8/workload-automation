@@ -60,6 +60,7 @@ public class UiAutomation extends BaseUiAutomation {
     @Test
     public void runWorkload() throws Exception{
         hitTest();
+        installAntutu();
         waitforCompletion();
     }
 
@@ -77,6 +78,42 @@ public class UiAutomation extends BaseUiAutomation {
             mDevice.findObject(new UiSelector().resourceId("com.antutu.ABenchMark:id/main_test_start_title"));
         testbutton.click();
         sleep(1);
+    }
+
+    public void installAntutu() throws Exception {
+        UiObject download =
+            mDevice.findObject(new UiSelector().resourceId("com.antutu.ABenchMark:id/gpu_plugin_from_org")
+                   .textContains("DOWNLOAD"));
+        if (download.exists()) {
+            download.click();
+        } else { //Annoying download button sometimes does not exist until navigated to get from market
+            UiObject getFromMarket =
+                mDevice.findObject(new UiSelector().resourceId("com.antutu.ABenchMark:id/gpu_plugin_from_market")
+                   .textContains("GET FROM MARKET"));
+            if (getFromMarket.exists()) {
+                getFromMarket.click();
+                mDevice.pressBack();
+                hitTest();
+                download.click();
+            }
+        }
+        sleep(1);
+        UiObject downloading = mDevice.findObject(new UiSelector().resourceId("com.antutu.ABenchMark:id/main_test_download_title")
+                   .textContains("Downloading"));
+        if (downloading.exists()) {
+            downloading.waitUntilGone(600000);
+        }
+        UiObject unknownAppsSettings = mDevice.findObject(new UiSelector().resourceId("android:id/button1")
+                   .textContains("SETTINGS"));
+        if (unknownAppsSettings.exists()) {
+            unknownAppsSettings.click();
+            UiObject allowFromSource = mDevice.findObject(new UiSelector().resourceId("android:id/switch_widget"));
+            allowFromSource.click();
+            mDevice.pressBack();
+            UiObject installButton = mDevice.findObject(new UiSelector().resourceId("com.android.packageinstaller:id/ok_button"));
+            installButton.waitForExists(10000);
+            installButton.click();
+        }
     }
 
     public void clearPopups() throws Exception {
@@ -98,7 +135,7 @@ public class UiAutomation extends BaseUiAutomation {
     public void waitforCompletion() throws Exception {
         UiObject totalScore =
             mDevice.findObject(new UiSelector().resourceId("com.antutu.ABenchMark:id/textViewTotalScore"));
-        totalScore.waitForExists(600000);
+        totalScore.waitForExists(1200000);
     }
 
     public void getScoresv7() throws Exception {

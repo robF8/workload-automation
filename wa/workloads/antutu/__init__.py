@@ -13,6 +13,7 @@
 # limitations under the License.
 #
 import re
+import os
 
 from wa import ApkUiautoWorkload, WorkloadError, Parameter
 
@@ -55,10 +56,14 @@ class Antutu(ApkUiautoWorkload):
     1. Open Antutu application
     2. Execute Antutu benchmark
 
-    Known working APK version: 8.0.4
+    Known working APK version: 8.3.0
+
+    As of February 2020 antutu has been removed from google playstore. It is recommended
+    to use 8.3.0 as automated setup steps involve downloading dependencies and installing 
+    from antutu directly. A copy of antutu v8.3.0 can be found at http://www.antutu.com/en/index.htm
     '''
 
-    supported_versions = ['7.0.4', '7.2.0', '8.0.4', '8.1.9']
+    supported_versions = ['7.0.4', '7.2.0', '8.0.4', '8.1.9', '8.3.0']
 
     parameters = [
         Parameter('version', kind=str, allowed_values=supported_versions, override=True,
@@ -77,8 +82,11 @@ class Antutu(ApkUiautoWorkload):
         #pylint: disable=no-self-use
         expected_results = len(regex_version)
         logcat_file = context.get_artifact_path('logcat')
+        if os.path.exists(logcat_file):
+            print(logcat_file)
         with open(logcat_file) as fh:
             for line in fh:
+                print(line)
                 for regex in regex_version:
                     match = regex.search(line)
                     if match:
