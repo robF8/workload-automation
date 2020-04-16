@@ -58,6 +58,12 @@ public class UiAutomation extends BaseUiAutomation {
     }
 
     public void clearPopups() throws Exception {
+        UiObject next = mDevice.findObject(new UiSelector().text("NEXT"));
+        if (next.waitForExists(2000)) {
+            next.click();
+        }
+
+
         UiSelector selector = new UiSelector();
 
         UiObject cancel = mDevice.findObject(selector.textContains("CANCEL")
