@@ -212,7 +212,9 @@ class SpecRunner():
                     os.system('cp {} {}'.format(run_file, os.path.join(spec_output, os.path.basename(run_file))))
 
     def finish(self, target):
-        target.execute('cd {} && rm -r {}'.format(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))
+        #open_files = target.execute('lsof')
+        #print(open_files)
+        #target.execute('cd {} && rm -r {}'.format(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))
         
         if len(self.incomplete_tests) > 0:
             self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
@@ -280,7 +282,13 @@ class SpecRunnerSpeed(SpecRunner):
             for line in fh:
                 if not 'real' in line:
                     continue
-                elapsed_time = parse(line.split('real')[0].strip()).time()
+                time_string = line.split('real')[0].strip()
+                mins = int(time_string.split('m')[0].strip())
+                if mins > 59:
+                    hrs, mins = str(mins//60), str(mins % 60)
+                    hrs_mins_string = '{}h{}m'.format(hrs, mins) 
+                    time_string = '{}{}'.format(hrs_mins_string, time_string.split('m')[1])
+                elapsed_time = parse(time_string).time()
                 (h, m, s) = elapsed_time.strftime('%H:%M:%S.%f').split(':')
                 total_time += datetime.timedelta(hours=int(h), minutes=int(m), seconds=float(s))
         classifiers = {'run_time_seconds' : total_time.seconds, 'run_type' : 'speed'}
