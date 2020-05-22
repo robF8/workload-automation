@@ -279,9 +279,10 @@ class SpecRunnerSpeed(SpecRunner):
             target.execute('perfetto --background --txt -c - -o /sdcard/devlib-target/spec.pftrace < /sdcard/devlib-target/trigger.cfg')
             command = 'sh {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, test_target_output_dir, timing_output_file_path)
             target.execute(command, as_root=True)
-            target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
+            #target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
 
     def update_output(self, context):
+        target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
         super().update_output(context)
         for test_name in self.tests:
             if test_name in self.incomplete_tests:
