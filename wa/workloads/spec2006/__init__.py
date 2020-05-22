@@ -281,7 +281,7 @@ class SpecRunnerSpeed(SpecRunner):
             target.execute(command, as_root=True)
             #target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
 
-    def update_output(self, context):
+    def update_output(self, target, context):
         target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
         super().update_output(context)
         for test_name in self.tests:
