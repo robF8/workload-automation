@@ -281,8 +281,7 @@ class SpecRunnerSpeed(SpecRunner):
             target.execute(command, as_root=True)
             #target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
 
-    def update_output(self, target, context):
-        target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
+    def update_output(self, context):
         super().update_output(context)
         for test_name in self.tests:
             if test_name in self.incomplete_tests:
@@ -330,6 +329,9 @@ class SpecRunnerSpeed(SpecRunner):
             group_timing_file.write('{}:\n'.format(test_name))
             for line in lines:
                 group_timing_file.write(line)
+    
+    def _finish_perfetto(self, target):
+        target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
        
     @staticmethod
     def _calculate_test_benchmark_ratio(test_name, elapsed_time):
