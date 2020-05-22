@@ -153,11 +153,20 @@ class SpecRunner():
         resource = File(resource_owner, "script/run_spec_2006.sh")
         host_executable = context.get_resource(resource)
         self.run_spec_script = target.install(host_executable)
+        trigger_resource = File(resource_owner, "script/trigger.cfg")
+        trigger_cfg = context.get_resource(trigger_resource)
+        target.push(trigger_cfg, TARGET_OUTPUT_DIRECTORY)
+        stop_resource = File(resource_owner, "script/stop.cfg")
+        stop_cfg = context.get_resource(stop_resource)
+        target.push(stop_cfg, TARGET_OUTPUT_DIRECTORY)
+
         
         # Clean output directory on target
         if OUTPUT_FOLDER in target.list_directory(TARGET_OUTPUT_DIRECTORY):
             target.execute('cd {} && rm -r {}'.format(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))
         target.execute('cd {} && mkdir {}'.format(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))
+        if 'spec.pftrace' in target.list_directory(TARGET_OUTPUT_DIRECTORY):
+            target.execute('cd {} && rm -r {}'.format(TARGET_OUTPUT_DIRECTORY, 'spec.pftrace'))
 
         resource = File(resource_owner, build_name)
         self.spec2k6_binaries = context.get_resource(resource)
@@ -199,6 +208,9 @@ class SpecRunner():
                         if test_name not in self.incomplete_tests:
                             self.incomplete_tests.append(test_name)
 
+        perfetto_output = os.path.join(TARGET_OUTPUT_DIRECTORY, 'spec.pftrace')
+        target.pull(perfetto_output, context.output_directory)
+    
     def update_output(self, context):
         spec_output = os.path.join(context.output_directory, OUTPUT_FOLDER)
         build_info = os.path.join(self.spec2k6_binaries, 'babel_build.json')
@@ -263,8 +275,11 @@ class SpecRunnerSpeed(SpecRunner):
             timing_file_prefix = 'int' if test_name in SPEC_INT_TESTS else 'fp'
             timing_output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, test_name, 'timing.txt')
             #target.execute('echo {}: | tee -a {}'.format(test_name, timing_output_file_path), as_root=target.is_rooted)
+            target.execute('setprop persist.traced.enable 1')
+            target.execute('perfetto --background --txt -c - -o /sdcard/devlib-target/spec.pftrace < /sdcard/devlib-target/trigger.cfg')
             command = 'sh {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, test_target_output_dir, timing_output_file_path)
             target.execute(command, as_root=True)
+            target.execute('perfetto --background --txt -c - < /sdcard/devlib-target/stop.cfg')
 
     def update_output(self, context):
         super().update_output(context)
