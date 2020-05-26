@@ -90,7 +90,7 @@ class Spec2006(Workload):
         		  description='Use this parameter to define which tests to run from the cpu2006 suite'),
         Parameter('run_type', kind=str, default='speed', allowed_values=['speed', 'throughput'],
         	       description='run_type to set the tests running in speed or throughput(rate) mode'),
-        Parameter('cpus', kind=cpu_mask, default=0)
+        Parameter('cpu_mask', kind=cpu_mask, default=0)
     ]
 
     def __init__(self, target, **kwargs):
@@ -121,10 +121,10 @@ class Spec2006(Workload):
     def setup(self, context):
         super(Spec2006, self).setup(context)
         self.spec_runner.setup(self.build_name, self.target, context, self)
-        if self.cpus:
-            self.cpu_mask = self.cpus.mask()
+        if self.cpu_mask:
+            self.cpu_mask = self.cpu_mask.mask()
         else:
-            self.cpu_mask = cpu_mask('0-7')
+            self.cpu_mask = cpu_mask('0-7').mask()
 
     def run(self, context):
         super(Spec2006, self).run(context)
@@ -266,9 +266,8 @@ class SpecRunnerSpeed(SpecRunner):
             print(test_target_output_dir)
             timing_file_prefix = 'int' if test_name in SPEC_INT_TESTS else 'fp'
             timing_output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, test_name, 'timing.txt')
-            #target.execute('echo {}: | tee -a {}'.format(test_name, timing_output_file_path), as_root=target.is_rooted)
-            taskset_value = int(mask, base=16)
-            command = 'sh {} {} {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, taskset_value,'', test_target_output_dir, timing_output_file_path)
+            self.logger.info(mask)
+            command = 'sh {} {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, mask, test_target_output_dir, timing_output_file_path)
             target.execute(command, as_root=True)
 
     def update_output(self, context):
