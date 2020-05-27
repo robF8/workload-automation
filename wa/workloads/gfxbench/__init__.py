@@ -20,7 +20,7 @@ from wa import ApkUiautoWorkload, WorkloadError, Parameter
 class Gfxbench(ApkUiautoWorkload):
 
     name = 'gfxbench-corporate'
-    package_names = ['net.kishonti.gfxbench.gl.v50000.corporate']
+    package_names = ['com.glbenchmark.glbenchmark27']
     clear_data_on_reset = False
     regex_matches = [re.compile(r'Car Chase score (.+)'),
                      re.compile(r'Car Chase Offscreen score (.+)'),
