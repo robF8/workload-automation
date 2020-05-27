@@ -39,6 +39,7 @@ public class UiAutomation extends BaseUiAutomation {
     private int networkTimeoutSecs = 30;
     private long networkTimeout =  TimeUnit.SECONDS.toMillis(networkTimeoutSecs);
     public static String TAG = "UXPERF";
+    public static String pkg = "com.glbenchmark.glbenchmark27";
 
     @Before
     public void initialize(){
@@ -52,7 +53,7 @@ public class UiAutomation extends BaseUiAutomation {
 
         //Calculate the location of the test selection button
         UiObject circle =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/main_circleControl")
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/main_circleControl")
             .className("android.widget.RelativeLayout"));
         Rect bounds = circle.getBounds();
         int selectx = bounds.width()/4;
@@ -115,7 +116,7 @@ public class UiAutomation extends BaseUiAutomation {
         }
 
         UiObject home =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/main_homeBack")
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/main_homeBack")
                 .className("android.widget.LinearLayout"));
             home.waitForExists(300000);
     }
@@ -136,54 +137,54 @@ public class UiAutomation extends BaseUiAutomation {
     public void getScores() throws Exception {
         UiScrollable list = new UiScrollable(new UiSelector().scrollable(true));
         UiObject results =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"));
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"));
         int number_of_results = results.getChildCount();
 
         //High Level Tests
         UiObject carchase =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"))
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"))
             .getChild(new UiSelector().index(1))
-            .getChild(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/updated_result_item_subresult"));
+            .getChild(new UiSelector().resourceId(pkg + ":id/updated_result_item_subresult"));
         Log.d(TAG, "Car Chase score " + carchase.getText());
 
         UiObject carchaseoff =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"))
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"))
             .getChild(new UiSelector().index(2))
-            .getChild(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/updated_result_item_subresult"));
+            .getChild(new UiSelector().resourceId(pkg + ":id/updated_result_item_subresult"));
         Log.d(TAG, "Car Chase Offscreen score " + carchaseoff.getText());
 
         UiObject manhattan =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"))
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"))
             .getChild(new UiSelector().index(3))
-            .getChild(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/updated_result_item_subresult"));
+            .getChild(new UiSelector().resourceId(pkg + ":id/updated_result_item_subresult"));
         Log.d(TAG, "Manhattan 3.1 score " + manhattan.getText());
 
         UiObject manhattan1080 =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"))
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"))
             .getChild(new UiSelector().index(4))
-            .getChild(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/updated_result_item_subresult"));
+            .getChild(new UiSelector().resourceId(pkg + ":id/updated_result_item_subresult"));
         Log.d(TAG, "1080p Manhattan 3.1 Offscreen score " + manhattan1080.getText());
 
         UiObject manhattan1440 =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"))
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"))
             .getChild(new UiSelector().index(5))
-            .getChild(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/updated_result_item_subresult"));
+            .getChild(new UiSelector().resourceId(pkg + ":id/updated_result_item_subresult"));
         Log.d(TAG, "1440p Manhattan 3.1 Offscreen score " + manhattan1440.getText());
 
         //Low Level Tests
         UiObject tess =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"))
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"))
             .getChild(new UiSelector().index(7))
-            .getChild(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/updated_result_item_subresult"));
+            .getChild(new UiSelector().resourceId(pkg + ":id/updated_result_item_subresult"));
         if (!tess.exists() && list.waitForExists(60)) {
             list.scrollIntoView(tess);
         }
         Log.d(TAG, "Tessellation score " + tess.getText());
 
         UiObject tessoff =
-            mDevice.findObject(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/results_testList"))
+            mDevice.findObject(new UiSelector().resourceId(pkg + ":id/results_testList"))
             .getChild(new UiSelector().index(8))
-            .getChild(new UiSelector().resourceId("net.kishonti.gfxbench.gl.v50000.corporate:id/updated_result_item_subresult"));
+            .getChild(new UiSelector().resourceId(pkg + ":id/updated_result_item_subresult"));
         if (!tessoff.exists() && list.waitForExists(60)) {
             list.scrollIntoView(tessoff);
         }
