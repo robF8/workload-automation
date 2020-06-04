@@ -217,9 +217,22 @@ class SpecRunner():
                     os.system('cp {} {}'.format(run_file, os.path.join(spec_output, os.path.basename(run_file))))
 
     def finish(self, target):
-        #open_files = target.execute('lsof')
-        #print(open_files)
-        #target.execute('cd {} && rm -r {}'.format(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))
+        for test in self.tests:
+            # For two of the tests the binary is named differently than the test name
+            if test == '483.xalancbmk':
+                return
+            if test == '482.sphinx3':
+                test = '482.sphinx_livepretend'
+
+            process_name = '{}_base.none'.format(test.split('.')[1])
+            pids = target.get_pids_of(process_name)
+            if pids:
+                target.killall(process_name, as_root=target.is_rooted)
+        
+        target.execute('cd {} && rm -r {}'.format(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))
+        command = 'cd /data/local/tmp && rm -r {}'.format(SPEC_TARGET_PATH_BASE)
+        target.execute(command)
+        
         
         if len(self.incomplete_tests) > 0:
             self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
@@ -270,7 +283,7 @@ class SpecRunnerSpeed(SpecRunner):
             timing_output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, test_name, 'timing.txt')
             self.logger.info('Setting affinity with mask: {}'.format(mask))
             command = 'sh {} {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, mask, test_target_output_dir, timing_output_file_path)
-            target.execute(command, as_root=True)
+            target.execute(command, as_root=target.is_rooted)
 
     def update_output(self, context):
         super().update_output(context)
