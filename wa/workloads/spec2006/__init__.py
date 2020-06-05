@@ -90,7 +90,8 @@ class Spec2006(Workload):
         		  description='Use this parameter to define which tests to run from the cpu2006 suite'),
         Parameter('run_type', kind=str, default='speed', allowed_values=['speed', 'throughput'],
         	       description='run_type to set the tests running in speed or throughput(rate) mode'),
-        Parameter('cpu_mask', kind=cpu_mask, default=0)
+        Parameter('cpu_mask', kind=cpu_mask, default=0),
+        Parameter('ensure_screen_is_off', kind=bool, default=False)
     ]
 
     def __init__(self, target, **kwargs):
@@ -112,7 +113,7 @@ class Spec2006(Workload):
         super(Spec2006, self).initialize(context)
         
         if self.run_type == 'speed':
-            self.spec_runner = SpecRunnerSpeed(self.test_names, self.logger)
+            self.spec_runner = SpecRunnerSpeed(self.test_names, self.logger, self.ensure_screen_is_off)
         else:
             # Convert to type string to ensure correct bitmask gets set in invoke_background()
             online_cpus = [str(cpu) for cpu in self.target.list_online_cpus()]
@@ -144,7 +145,7 @@ class Spec2006(Workload):
 
 class SpecRunner():
     
-    def __init__(self, tests, logger):
+    def __init__(self, tests, logger, ensure_screen_is_off):
         self.tests = tests
         self.logger = logger
         self.name = 'SpecRunner'
@@ -152,6 +153,7 @@ class SpecRunner():
         self.spec_int_scores = []
         self.spec_fp_scores = []
         self.group_scores = {'int' : [], 'fp' : []}
+        self.ensure_screen_is_off = ensure_screen_is_off
 
 
     def setup(self, build_name, target, context, resource_owner):
@@ -186,6 +188,9 @@ class SpecRunner():
             test_run_folder_target_dir = os.path.join(SPEC_TARGET_PATH_BASE, test)
             target.push(test_run_folder, test_run_folder_target_dir, timeout=300)
             target.execute('chmod -R a+x {}'.format(test_run_folder_target_dir))
+
+            if self.ensure_screen_is_off:
+                target.ensure_screen_is_off()
 
     def run(self, target):
         pass
@@ -233,7 +238,9 @@ class SpecRunner():
         command = 'cd /data/local/tmp && rm -r {}'.format(SPEC_TARGET_PATH_BASE)
         target.execute(command)
         
-        
+        if self.ensure_screen_is_off:
+            target.ensure_screen_is_on()
+
         if len(self.incomplete_tests) > 0:
             self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
 
@@ -266,8 +273,8 @@ class SpecRunner():
 
 class SpecRunnerSpeed(SpecRunner):
 
-    def __init__(self, tests, logger):
-        super().__init__(tests, logger)
+    def __init__(self, tests, logger, ensure_screen_is_off):
+        super().__init__(tests, logger, ensure_screen_is_off)
     
     def run(self, target, mask):
         for test_name in self.tests:
@@ -341,8 +348,8 @@ class SpecRunnerSpeed(SpecRunner):
 
 class SpecRunnerThroughput(SpecRunner):
 
-    def __init__(self, tests, logger, online_cpus):
-        super().__init__(tests, logger)
+    def __init__(self, tests, logger, online_cpus, ensure_screen_is_off):
+        super().__init__(tests, logger, ensure_screen_is_off)
         self.online_cpus = online_cpus
         #TODO: Tune expected wait time for each test
         self.EXPECTED_WAIT_TIME = {'400.perlbench' : 502, '401.bzip2' : 360,
