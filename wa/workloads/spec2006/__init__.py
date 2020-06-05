@@ -271,6 +271,7 @@ class SpecRunnerSpeed(SpecRunner):
     
     def run(self, target, mask):
         for test_name in self.tests:
+            target.ensure_screen_is_off()
             self.logger.info('*****RUNNING******: ' + test_name)
             if not self._does_test_folder_exist(target, test_name) or not self._does_run_folder_exist(target, test_name):
                 self.logger.warning('Test folder does not exist for {}......skipping'.format(test_name))
