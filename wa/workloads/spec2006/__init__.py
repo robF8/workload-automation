@@ -91,7 +91,8 @@ class Spec2006(Workload):
         Parameter('run_type', kind=str, default='speed', allowed_values=['speed', 'throughput'],
         	       description='run_type to set the tests running in speed or throughput(rate) mode'),
         Parameter('cpu_mask', kind=cpu_mask, default=0),
-        Parameter('ensure_screen_is_off', kind=bool, default=False)
+        Parameter('ensure_screen_is_off', kind=bool, default=False),
+        Parameter('timeout_seconds', kind = int, description='timeout for test run in seconds', default = 5400)
     ]
 
     def __init__(self, target, **kwargs):
@@ -123,13 +124,13 @@ class Spec2006(Workload):
         super(Spec2006, self).setup(context)
         self.spec_runner.setup(self.build_name, self.target, context, self)
         if self.cpu_mask:
-            self.cpu_mask = self.cpu_mask.mask()
+            self.mask = self.cpu_mask.mask()
         else:
-            self.cpu_mask = cpu_mask('0-7').mask()
+            self.mask = cpu_mask('0-7').mask()
 
     def run(self, context):
         super(Spec2006, self).run(context)
-        self.spec_runner.run(self.target, self.cpu_mask)
+        self.spec_runner.run(self.target, self.mask, self.timeout_seconds)
 
     def extract_results(self, context):
         super(Spec2006, self).extract_results(context)
@@ -276,7 +277,7 @@ class SpecRunnerSpeed(SpecRunner):
     def __init__(self, tests, logger, ensure_screen_is_off):
         super().__init__(tests, logger, ensure_screen_is_off)
     
-    def run(self, target, mask):
+    def run(self, target, mask, timeout_seconds):
         for test_name in self.tests:
             self.logger.info('*****RUNNING******: ' + test_name)
             if not self._does_test_folder_exist(target, test_name) or not self._does_run_folder_exist(target, test_name):
@@ -290,7 +291,7 @@ class SpecRunnerSpeed(SpecRunner):
             timing_output_file_path = os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER, test_name, 'timing.txt')
             self.logger.info('Setting affinity with mask: {}'.format(mask))
             command = 'sh {} {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, mask, test_target_output_dir, timing_output_file_path)
-            target.execute(command, as_root=target.is_rooted)
+            target.execute(command, as_root=target.is_rooted, timeout=timeout_seconds)
 
     def update_output(self, context):
         super().update_output(context)
