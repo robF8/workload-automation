@@ -190,6 +190,7 @@ class SpecRunner():
             target.push(test_run_folder, test_run_folder_target_dir, timeout=300)
             target.execute('chmod -R a+x {}'.format(test_run_folder_target_dir))
 
+            target.execute('echo stay_awake_please > /sys/power/wake_lock', as_root=target.is_rooted)
             if self.ensure_screen_is_off:
                 target.ensure_screen_is_off()
 
@@ -239,6 +240,8 @@ class SpecRunner():
         command = 'cd /data/local/tmp && rm -r {}'.format(SPEC_TARGET_PATH_BASE)
         target.execute(command)
         
+        target.execute('echo stay_awake_please > /sys/power/wake_unlock', as_root=target.is_rooted)
+
         if self.ensure_screen_is_off:
             target.ensure_screen_is_on()
 
