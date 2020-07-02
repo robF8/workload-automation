@@ -192,7 +192,17 @@ class SpecRunner():
 
             target.execute('echo stay_awake_please > /sys/power/wake_lock', as_root=target.is_rooted)
             if self.ensure_screen_is_off:
-                target.ensure_screen_is_off()
+                if target.is_screen_on():
+                    self.logger.info('Screen is ON. Turning screen off')
+                    target.execute('input keyevent 26')
+                    time.sleep(2)
+                    if target.is_screen_on():
+                        self.logger.info('Screen was not turned off correctly. Waiting for 1 min to try again')
+                        time.sleep(60)
+                        target.ensure_screen_is_off()
+                    else:
+                        target.ensure_screen_is_off()
+                        self.logger.info('Screen is OFF')
 
     def run(self, target):
         pass
@@ -295,6 +305,11 @@ class SpecRunnerSpeed(SpecRunner):
             self.logger.info('Setting affinity with mask: {}'.format(mask))
             command = 'sh {} {} {} {} 2>&1 | tee  -a {}'.format(self.run_spec_script, test_name, mask, test_target_output_dir, timing_output_file_path)
             target.execute(command, as_root=target.is_rooted, timeout=timeout_seconds)
+            if self.ensure_screen_is_off:
+                if target.is_screen_on():
+                    self.logger.error('Screen is ON at end of run')
+                else:
+                    self.logger.info('Run Ended, screen is OFF')
 
     def update_output(self, context):
         super().update_output(context)
