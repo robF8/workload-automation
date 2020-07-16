@@ -246,6 +246,8 @@ class SpecRunner():
             if pids:
                 target.killall(process_name, as_root=target.is_rooted)
         
+        file_size = target.execute('du -sk {}'.format(os.path.join(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))).split()[0].strip()
+        self.logger.info('Removing ouput folder. Size: {}kb'.format(file_size))
         target.execute('cd {} && rm -r {}'.format(TARGET_OUTPUT_DIRECTORY, OUTPUT_FOLDER))
         command = 'cd /data/local/tmp && rm -r {}'.format(SPEC_TARGET_PATH_BASE)
         target.execute(command)
