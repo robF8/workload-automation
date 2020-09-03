@@ -17,6 +17,7 @@
 
 import os
 import re
+import time
 
 from wa import Workload, Parameter, ConfigError, Executable
 from wa.utils.exec_control import once
@@ -71,6 +72,9 @@ class Dhrystone(Workload):
                   pinned to cores as specified by this parameter. The mask can
                   be specified directly as a mask, as a list of cpus or a sysfs-
                   style string '''),
+        Parameter('iterations', kind=int, default=1),
+        Parameter('iterations_delay', kind=int, default=0),
+        Parameter('long_delay', kind=bool, default=False)
     ]
 
     @once
@@ -87,6 +91,7 @@ class Dhrystone(Workload):
         if self.cpus:
             taskset_string = '{} taskset {} '.format(self.target.busybox,
                                                      self.cpus.mask())
+            self.logger.info('taskset string: {}'.format(taskset_string))
         else:
             taskset_string = ''
         self.command = '{}{} {} -t {} -d {}'.format(taskset_string,
@@ -102,13 +107,28 @@ class Dhrystone(Workload):
 
     def run(self, context):
         self.output = None
-        try:
-            self.output = self.target.execute(self.command,
+        for i in range(self.iterations):
+            try:
+                self.output = self.target.execute(self.command,
                                               timeout=self.timeout,
                                               check_exit_code=False)
-        except KeyboardInterrupt:
-            self.target.killall('dhrystone')
-            raise
+            except KeyboardInterrupt:
+                self.target.killall('dhrystone')
+                raise
+            self.logger.info('sleeping {}'.format(i))
+            time.sleep(self.iterations_delay)
+        if self.long_delay:
+            time.sleep(1200)
+            for i in range(self.iterations):
+                try:
+                    self.output = self.target.execute(self.command,
+                                              timeout=self.timeout,
+                                              check_exit_code=False)
+                except KeyboardInterrupt:
+                    self.target.killall('dhrystone')
+                    raise
+                self.logger.info('sleeping {}'.format(i))
+                time.sleep(self.iterations_delay)
 
     def extract_results(self, context):
         if self.output:
