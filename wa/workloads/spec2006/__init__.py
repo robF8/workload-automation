@@ -254,9 +254,6 @@ class SpecRunner():
         
         target.execute('echo stay_awake_please > /sys/power/wake_unlock', as_root=target.is_rooted)
 
-        if self.ensure_screen_is_off:
-            target.ensure_screen_is_on()
-
         if len(self.incomplete_tests) > 0:
             self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
 
