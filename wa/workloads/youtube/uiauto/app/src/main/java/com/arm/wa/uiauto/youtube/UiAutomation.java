@@ -65,7 +65,8 @@ public class UiAutomation extends BaseUiAutomation {
     public void runWorkload() throws Exception {
         String videoSource = parameters.getString("video_source");
         String searchTerm = parameters.getString("search_term");
-        testPlayVideo(videoSource, searchTerm);
+        UiObject video = getVideoObject(videoSource, searchTerm);
+        testPlayVideo(video, videoSource);
         dismissAdvert();
         checkPlayerError();
         pausePlayVideo();
@@ -131,6 +132,22 @@ public class UiAutomation extends BaseUiAutomation {
             clickUiObject(BY_DESC, "Account");
         }
         clickUiObject(BY_TEXT, "Settings", true);
+
+        // On newer version autoplay has its own menu item so click twice to toggle
+        UiObject autoplayMenuItem =
+            mDevice.findObject(new UiSelector().textContains("Autoplay"));
+        if (autoplayMenuItem.waitForExists(WAIT_TIMEOUT_1SEC)) {
+            autoplayMenuItem.click();
+            UiObject autoplayToggle =
+                mDevice.findObject(new UiSelector().className("android.widget.Switch"));
+            if (autoplayToggle.waitForExists(WAIT_TIMEOUT_1SEC)) {
+                autoplayToggle.click();
+            }
+            mDevice.pressBack();
+            mDevice.pressBack();
+            return;
+        }
+        // Support older versions, autoplay toggle located under general settings
         clickUiObject(BY_TEXT, "General", true);
 
         // Don't fail fatally if autoplay toggle cannot be found
@@ -151,15 +168,13 @@ public class UiAutomation extends BaseUiAutomation {
         }
     }
 
-    public void testPlayVideo(String source, String searchTerm) throws Exception {
-        String testTag = "play";
-        ActionLogger logger = new ActionLogger(testTag + "_" + source, parameters);
-
+    public UiObject getVideoObject(final String source, final String searchTerm) throws Exception {
         if (SOURCE_SEARCH.equalsIgnoreCase(source)) {
             clickUiObject(BY_DESC, "Search");
             UiObject textField = getUiObjectByResourceId(packageID + "search_edit_text");
             textField.setText(searchTerm);
             mDevice.pressEnter();
+            
             // If a video exists whose title contains the exact search term, then play it
             // Otherwise click the first video in the search results
             UiObject thumbnail =
@@ -167,29 +182,60 @@ public class UiAutomation extends BaseUiAutomation {
             UiObject matchedVideo =
                 thumbnail.getFromParent(new UiSelector().textContains(searchTerm));
 
-            logger.start();
             if (matchedVideo.exists()) {
-                matchedVideo.clickAndWaitForNewWindow();
-            } else {
-                thumbnail.clickAndWaitForNewWindow();
+                return matchedVideo;
+            } else if (thumbnail.exists()) {
+                return thumbnail;
             }
-            logger.stop();
+
+            matchedVideo = 
+                mDevice.findObject(new UiSelector().resourceId(packageID + "title").textContains(searchTerm));
+            if(matchedVideo.waitForExists(3000)) {
+                return matchedVideo;
+            }
+
+            // Newer version (14.41.52) thumbnail object does not exist so grab view group searchTerm
+            UiObject video = mDevice.findObject(new UiSelector().descriptionContains(searchTerm)
+                                                                .className("android.view.ViewGroup"));
+            return video;
+
 
         } else if (SOURCE_MY_VIDEOS.equalsIgnoreCase(source)) {
-            clickUiObject(BY_DESC, "Account");
+            UiObject libraryBtn = mDevice.findObject(new UiSelector().textContains("Library"));
+            if(libraryBtn.exists()) {
+                libraryBtn.click();
+            } else {
+                clickUiObject(BY_TEXT, "Account");
+            }
+
             clickUiObject(BY_TEXT, "My Videos", true);
 
-            logger.start();
-            clickUiObject(BY_ID, packageID + "thumbnail", true);
-            logger.stop();
+            UiObject thumbnail = 
+                mDevice.findObject(new UiSelector().resourceId(packageID + "thumbnail"));
+
+            if (!thumbnail.waitForExists(WAIT_TIMEOUT_1SEC * 3)) {
+                throw new RuntimeException("There are no videos associated with this account, add at least one video");
+            }
+
+            return thumbnail;
 
         } else if (SOURCE_TRENDING.equalsIgnoreCase(source)) {
             clickUiObject(BY_DESC, "Trending");
 
-            logger.start();
-            clickUiObject(BY_ID, packageID + "thumbnail", true);
-            logger.stop();
+            UiObject thumbnail =
+                mDevice.findObject(new UiSelector().resourceId(packageID + "thumbnail"));
+             
+             if (thumbnail.exists()) {
+                return thumbnail;
+             }
 
+            // Newer versions (14.41.52)
+            UiObject trendingVideosView = 
+                mDevice.findObject(new UiSelector().resourceId(packageID + "results"));
+            
+            // Return first view group in the list
+            return trendingVideosView.getChild(new UiSelector().className("android.view.ViewGroup"));
+            
         } else { // homepage videos
             UiScrollable list =
                 new UiScrollable(new UiSelector().resourceId(packageID + "results"));
@@ -197,11 +243,23 @@ public class UiAutomation extends BaseUiAutomation {
                 list.scrollForward();
             }
 
-            logger.start();
-            clickUiObject(BY_ID, packageID + "thumbnail", true);
-            logger.stop();
-
+            UiObject thumbnail = 
+                mDevice.findObject(new UiSelector().resourceId(packageID + "thumbnail"));
+            if (thumbnail.exists()) {
+                return thumbnail;
+            } else {
+                return list.getChild(new UiSelector().className("android.view.ViewGroup"));
+            }
         }
+    }
+
+    public void testPlayVideo(final UiObject video, final String source) throws Exception {
+        String testTag = "play";
+        ActionLogger logger = new ActionLogger(testTag + "_" + source, parameters);
+
+        logger.start();
+        video.clickAndWaitForNewWindow();
+        logger.stop();
     }
 
     public void dismissAdvert() throws Exception {
@@ -230,10 +288,15 @@ public class UiAutomation extends BaseUiAutomation {
     public void pausePlayVideo() throws Exception {
         UiObject player = getUiObjectByResourceId(packageID + "player_fragment_container");
         sleep(VIDEO_SLEEP_SECONDS);
-        repeatClickUiObject(player, 2, 100);
-        sleep(1); // pause the video momentarily
         player.click();
-        sleep(VIDEO_SLEEP_SECONDS);
+        UiObject pauseBtn = mDevice.findObject(new UiSelector().descriptionContains("Pause video"));
+        if(pauseBtn.waitForExists(300)) {
+            pauseBtn.click();
+            sleep(1); // Pause for a second
+            mDevice.findObject(new UiSelector().descriptionContains("Play video")).click();
+        } else {
+            throw new RuntimeException("Unable to pause video");
+        }
     }
 
     public void checkVideoInfo() throws Exception {
