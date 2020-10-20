@@ -171,11 +171,15 @@ public class UiAutomation extends BaseUiAutomation implements ApplaunchInterface
         if (!conversationView.waitForExists(networkTimeout)) {
             throw new UiObjectNotFoundException("Could not find \"conversationView\".");
         }
-
         //Get rid of smart compose message on newer versions and return to home screen before ckickNewMail test
-        UiObject newMailButton =
-            getUiObjectByDescription("Compose", "android.widget.ImageButton");
-        newMailButton.click();
+        UiObject newMailButton = mDevice.findObject(new UiSelector().textContains("Compose"));
+        if (newMailButton.waitForExists(uiAutoTimeout)) {
+            newMailButton.click();
+        } else {
+            newMailButton =
+                getUiObjectByDescription("Compose", "android.widget.ImageButton");
+            newMailButton.click();
+        }
 
         UiObject smartComposeDismissButton = mDevice.findObject(new UiSelector().textContains("Got it")
                                                                                 .className("android.widget.Button"));
@@ -197,8 +201,16 @@ public class UiAutomation extends BaseUiAutomation implements ApplaunchInterface
         String testTag = "click_new";
         ActionLogger logger = new ActionLogger(testTag, parameters);
 
-        UiObject newMailButton =
-            getUiObjectByDescription("Compose", "android.widget.ImageButton");
+        UiObject newMailButton = mDevice.findObject(new UiSelector()
+                                        .textContains("Compose")
+                                        .className("android.widget.Button"));
+
+        if (!newMailButton.waitForExists(uiAutoTimeout)) {
+            newMailButton =
+                getUiObjectByDescription("Compose", "android.widget.ImageButton");
+        }
+
+        
 
         logger.start();
         newMailButton.clickAndWaitForNewWindow(uiAutoTimeout);
@@ -225,6 +237,21 @@ public class UiAutomation extends BaseUiAutomation implements ApplaunchInterface
                                                .className("android.widget.TextView"));
         }
         attachFile.clickAndWaitForNewWindow(uiAutoTimeout);
+
+        UiObject imagesChip = mDevice.findObject(new UiSelector().textContains("Images")
+                                     .className("com.google.android.material.chip.Chip"));
+
+        if (imagesChip.exists()) {
+            imagesChip.click();
+
+            UiObject imageButton = mDevice.findObject(new UiSelector().textContains(test_image)
+                                                                      .className("android.widget.TextView"));
+
+            imageButton.click();
+            imageButton.waitUntilGone(uiAutoTimeout);
+            logger.stop();
+            return;           
+        }
 
         // Show Roots menu
         UiObject rootMenu =
@@ -314,8 +341,11 @@ public class UiAutomation extends BaseUiAutomation implements ApplaunchInterface
         ActionLogger logger = new ActionLogger(testTag, parameters);
 
         UiObject composeField = mDevice.findObject(new UiSelector().textContains("Compose email"));
-        if (!composeField.exists()){
+        if (!composeField.waitForExists(uiAutoTimeout)){
             composeField = mDevice.findObject(new UiSelector().descriptionContains("Compose email"));
+            if (!composeField.exists()) {
+                composeField = mDevice.findObject(new UiSelector().resourceId(packageID + "composearea_tap_trap_bottom"));
+            }
         }
 
         logger.start();
