@@ -19,6 +19,7 @@ import android.content.Intent;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.support.test.runner.AndroidJUnit4;
+import android.support.test.uiautomator.UiScrollable;
 import android.support.test.uiautomator.UiObject;
 import android.support.test.uiautomator.UiObjectNotFoundException;
 import android.support.test.uiautomator.UiSelector;
@@ -76,6 +77,7 @@ public class UiAutomation extends BaseUiAutomation implements ApplaunchInterface
         closeAndReturn(true);
         navigateUp();
 
+        scrollUp();
         selectGalleryFolder("wa-3");
         selectFirstImage();
         cropPhotoTest();
@@ -102,6 +104,12 @@ public class UiAutomation extends BaseUiAutomation implements ApplaunchInterface
         // Clear the initial run dialogues of the application launch.
         dismissWelcomeView();
         closePromotionPopUp();
+
+        //For older version dismiss update now
+        UiObject dismissUpdate = mDevice.findObject(new UiSelector().textContains("Not now"));
+        if(dismissUpdate.waitForExists(2000)) {
+            dismissUpdate.click();
+        }
     }
 
     // Returns the launch command for the application.
@@ -472,5 +480,11 @@ public class UiAutomation extends BaseUiAutomation implements ApplaunchInterface
             default:
                 break;
         }
+    }
+
+    private void scrollUp() throws Exception {
+        //UiObject recycler_view = mDevice.findObject(new UiSelector().resourceId(packageID + "recycler_view"));
+        //uiObjectSwipe(recycler_view, Direction direction, int steps)
+        uiDeviceSwipe(Direction.DOWN, 500);
     }
 }
