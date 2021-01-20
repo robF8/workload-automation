@@ -80,7 +80,7 @@ class Jetstream(Workload):
     supported_platforms = ["android"]
 
     package_names = ["org.chromium.chrome", "com.android.chrome"]
-    regex = re.compile('node index="0" text="(\d+.\d+)" resource-id=""')
+    regex = re.compile(r'node index="0" text="(\d+.\d+)" resource-id=""')
 
     parameters = [
         Parameter(
@@ -258,10 +258,11 @@ class Jetstream(Workload):
 
             time.sleep(sleep_period_s)
 
-    def read_score(self):
+    def read_score(self, context, iteration):
         self.target.execute(
             "uiautomator dump {}".format(self.ui_dump_loc), as_root=True
         )
+
         self.target.pull(self.ui_dump_loc, self.temp_dir.name)
 
         with open(os.path.join(self.temp_dir.name, "ui_dump.xml"), "rb") as fh:
@@ -271,7 +272,18 @@ class Jetstream(Workload):
         if match:
             result = float(match.group(1))
 
-        return result
+        subtest_scores = {}
+
+        subtest_regex = [re.compile(r'text="(\d+.\d+)" resource-id="results-cell-([a-zA-Z0-9-]+)-score"'),
+                         re.compile(r'text="([\d.\d]+)" resource-id="wasm-score-id([a-z-]+)"'),
+                         re.compile(r'text="([\d.\d]+)" resource-id="([a-z0-9]+)-score-score"')]
+        for regex in subtest_regex:
+            matches = regex.findall(dump)
+            for match in matches:
+                subtest_scores[match[1]] = match[0]
+
+        return result, subtest_scores
+
 
     def update_output(self, context):
         super(Jetstream, self).update_output(context)
@@ -281,13 +293,18 @@ class Jetstream(Workload):
         score_read = False
         iterations = 0
         while not score_read:
-            score = self.read_score()
+            score, subtest_scores = self.read_score(context, iterations)
 
             if score is not None:
                 context.add_metric(
                     "Jetstream Score", score, "Runs per minute", lower_is_better=False
                 )
-                score_read = True
+                if subtest_scores:
+                    for subtest_score in subtest_scores.keys():
+                        context.add_metric(
+                            subtest_score, subtest_scores[subtest_score], 'subtest_score', lower_is_better=False
+                        )
+                    score_read = True
             else:
                 if iterations >= 10:
                     raise WorkloadError(
