@@ -190,8 +190,9 @@ class SpecRunner():
             target.push(test_run_folder, test_run_folder_target_dir, timeout=300)
             target.execute('chmod -R a+x {}'.format(test_run_folder_target_dir))
 
-            target.execute('echo stay_awake_please > /sys/power/wake_lock', as_root=target.is_rooted)
             if self.ensure_screen_is_off:
+                if target.is_rooted:
+                    target.execute('echo stay_awake_please > /sys/power/wake_lock')
                 if target.is_screen_on():
                     self.logger.info('Screen is ON. Turning screen off')
                     target.execute('input keyevent 26')
@@ -252,7 +253,9 @@ class SpecRunner():
         command = 'cd /data/local/tmp && rm -r {}'.format(SPEC_TARGET_PATH_BASE)
         target.execute(command)
         
-        target.execute('echo stay_awake_please > /sys/power/wake_unlock', as_root=target.is_rooted)
+        if self.ensure_screen_is_off:
+            if target.is_rooted:
+                target.execute('echo stay_awake_please > /sys/power/wake_unlock', as_root=target.is_rooted)
 
         if len(self.incomplete_tests) > 0:
             self.logger.warning('The following tests did not run correctly:{}'.format(self.incomplete_tests))
