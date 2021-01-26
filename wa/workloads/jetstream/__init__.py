@@ -263,9 +263,9 @@ class Jetstream(Workload):
             "uiautomator dump {}".format(self.ui_dump_loc), as_root=True
         )
 
-        self.target.pull(self.ui_dump_loc, self.temp_dir.name)
+        self.target.pull(self.ui_dump_loc, context.output_directory)
 
-        with open(os.path.join(self.temp_dir.name, "ui_dump.xml"), "rb") as fh:
+        with open(os.path.join(context.output_directory, "ui_dump.xml"), "rb") as fh:
             dump = fh.read().decode("utf-8")
         match = self.regex.search(dump)
         result = None
@@ -274,13 +274,37 @@ class Jetstream(Workload):
 
         subtest_scores = {}
 
-        subtest_regex = [re.compile(r'text="(\d+.\d+)" resource-id="results-cell-([a-zA-Z0-9-]+)-score"'),
-                         re.compile(r'text="([\d.\d]+)" resource-id="wasm-score-id([a-z-]+)"'),
-                         re.compile(r'text="([\d.\d]+)" resource-id="([a-z0-9]+)-score-score"')]
-        for regex in subtest_regex:
-            matches = regex.findall(dump)
-            for match in matches:
-                subtest_scores[match[1]] = match[0]
+        #subtest_regex = [re.compile(r'text="(\d+.\d+)" resource-id="results-cell-([a-zA-Z0-9-]+)-([a-zA-Z0-9-]+)"'),
+        #                 re.compile(r'text="([\d.\d]+)" resource-id="wasm-([a-zA-Z0-9-]+)-id([a-z-]+)"'),
+        #                 re.compile(r'text="([\d.\d]+)" resource-id="([a-z0-9]+)-([a-zA-Z0-9-]+)-score"')]
+
+        subtest_regex = re.compile(r'text="(\d+.\d+)" resource-id="results-cell-([\.a-zA-Z0-9-]+)-([a-zA-Z4]+)"')
+        matches = subtest_regex.findall(dump)
+        for match in matches:
+            print(match)
+            print(match[1])
+            if match[1] not in subtest_scores.keys():
+                subtest_scores[match[1]] = {}
+            #subtest_scores[match[1]] = {}
+            subtest_scores[match[1]][match[2].strip('4')] = match[0]
+        
+        wasm_regex = re.compile(r'text="([\d.\d]+)" resource-id="wasm-([a-zA-Z0-9-]+)-id([a-z-]+)"')
+        matches = wasm_regex.findall(dump)
+        for match in matches:
+            if match[2] not in subtest_scores.keys():
+                subtest_scores[match[2]] = {}
+            metric = 'runtime' if match[1] == 'run' else match[1] 
+            subtest_scores[match[2]][metric] = match[0]
+        
+        wsl_regex = re.compile(r'text="([\d.\d]+)" resource-id="wsl-([a-zA-Z0-9-]+)-score"')
+        matches = wsl_regex.findall(dump)
+        subtest_scores['wsl'] = {}
+        for match in matches:
+            metric = 'main_run' if match[1] == 'tests' else match[1]
+            subtest_scores['wsl'][metric] = match[0]
+            #print(subtest_scores[match[1]])
+
+        print(subtest_scores)
 
         return result, subtest_scores
 
@@ -301,8 +325,17 @@ class Jetstream(Workload):
                 )
                 if subtest_scores:
                     for subtest_score in subtest_scores.keys():
+                        classifiers = {}
+                        for metric in subtest_scores[subtest_score].keys():
+                            if metric != 'score':
+                                classifiers[metric] = subtest_scores[subtest_score][metric]
+                        print(subtest_score)
                         context.add_metric(
-                            subtest_score, subtest_scores[subtest_score], 'subtest_score', lower_is_better=False
+                            subtest_score,
+                            subtest_scores[subtest_score]['score'],
+                            'subtest_score', 
+                            lower_is_better=False,
+                            classifiers = classifiers
                         )
                     score_read = True
             else:
